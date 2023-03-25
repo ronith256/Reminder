@@ -2,7 +2,10 @@ package com.lucario.reminder;
 
 import org.osmdroid.util.GeoPoint;
 
-public class Geofence {
+import java.io.Serializable;
+
+public class Geofence implements Serializable {
+    private static final long serialVersionUID = 2L;
     private String id;
     private GeoPoint center;
     private float radius;

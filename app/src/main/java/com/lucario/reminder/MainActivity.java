@@ -1,59 +1,71 @@
 package com.lucario.reminder;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.AppCompatImageButton;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import android.Manifest;
 import android.app.Activity;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.Color;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.ColorDrawable;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
+import android.icu.text.SimpleDateFormat;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
-import android.media.Image;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.PopupWindow;
 import android.widget.TextView;
-import android.widget.Toast;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.gms.maps.model.LatLng;
 
 import org.osmdroid.bonuspack.location.GeocoderNominatim;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.Marker;
+import org.osmdroid.views.overlay.TilesOverlay;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
-public class MainActivity extends AppCompatActivity implements LocationListener {
+public class MainActivity extends AppCompatActivity implements LocationListener,RemindersViewAdapter.click {
 
     private MapView mapView;
     private Geofence[] geofences;
@@ -66,7 +78,19 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     static ArrayList<Address> addresses = new ArrayList<>();
 
+    private ArrayList<Reminder> reminders = new ArrayList<>();
+
     private MapView itemViewMap;
+
+    private Button addButton, cancelButton;
+
+    private EditText topicText;
+
+    private Address address;
+
+    RecyclerView remindersView;
+
+    RemindersViewAdapter remindersViewAdapter;
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
 
@@ -81,24 +105,25 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         osmConf.setOsmdroidTileCache(tileCache);
         osmConf.setUserAgentValue("chrome");
         setContentView(R.layout.activity_main);
+
+        reminders = loadRemindersFromFile(getApplicationContext());
         geofences = new Geofence[10];
         geocoder = new GeocoderNominatim(BuildConfig.APPLICATION_ID);
         geocoder.setService("https://nominatim.openstreetmap.org/");
 
+        remindersView = findViewById(R.id.remindersView);
+        remindersViewAdapter = new RemindersViewAdapter(getApplicationContext(), reminders, this);
+        remindersView.setAdapter(remindersViewAdapter);
+        remindersView.setLayoutManager(new LinearLayoutManager(getApplicationContext()));
+
         ImageButton addButton = (ImageButton) findViewById(R.id.imageButton);
-        addButton.setOnClickListener(e->{
-            showPopup();
-        });
+        addButton.setOnClickListener(e-> showPopup());
 
         mapView = findViewById(R.id.mapview);
         GeoPoint center = new GeoPoint( 10.884319, 76.908697); // New York City
         float radius = 1000.0f; // 1 kilometer
         geofences[0] = new Geofence("my_geofence", center, radius);
         // Set the map center and zoom level
-        GeoPoint startPoint = new GeoPoint(40.712776, -74.005974); // New York City
-        mapView.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
-        mapView.getController().setZoom(10.0);
-        mapView.getController().setCenter(startPoint);
         start();
     }
 
@@ -109,6 +134,14 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
                 checkLocationPermission();
                 return;
             }
+            Location curLoc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            GeoPoint startPoint = new GeoPoint(curLoc.getLatitude(), curLoc.getLongitude());
+            mapView.getOverlayManager().getTilesOverlay().setColorFilter(TilesOverlay.INVERT_COLORS);
+            mapView.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
+            mapView.getController().setZoom(17.0);
+            mapView.getController().setCenter(startPoint);
+            mapView.setBuiltInZoomControls(false);
+            mapView.setMultiTouchControls(true);
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10000, 0, this);
         }
     }
@@ -130,18 +163,27 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         itemViewMap = popupView.findViewById(R.id.newItemMap);
         itemViewMap.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
         itemViewMap.getController().setZoom(17.0);
+        itemViewMap.setBuiltInZoomControls(false);
+        itemViewMap.setMultiTouchControls(true);
+        itemViewMap.getOverlayManager().getTilesOverlay().setColorFilter(TilesOverlay.INVERT_COLORS);
 
-        searchEditText.setOnItemClickListener(new AdapterView.OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                Address result = addresses.get(0);
-                GeoPoint point = new GeoPoint(result.getLatitude(), result.getLongitude());
-                itemViewMap.getController().animateTo(point);
-                searchEditText.dismissDropDown();
-                searchEditText.clearListSelection();
-                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
-                    imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
-            }
+        addButton = popupView.findViewById(R.id.addButton);
+        cancelButton = popupView.findViewById(R.id.cancelButton);
+
+        addButton.setOnClickListener(e->{
+            onAddButtonClick();
+            popupWindow.dismiss();
+        });
+        cancelButton.setOnClickListener(e->popupWindow.dismiss());
+        topicText = popupView.findViewById(R.id.topicEditText);
+
+        searchEditText.setOnItemClickListener((adapterView, view, i, l) -> {
+            Address result = addresses.get(0);
+            GeoPoint point = new GeoPoint(result.getLatitude(), result.getLongitude());
+            itemViewMap.getController().animateTo(point);
+            searchEditText.dismissDropDown();
+            searchEditText.clearListSelection();
+            address = result;
         });
 
         searchEditText.addTextChangedListener(new TextWatcher() {
@@ -180,16 +222,111 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         wm.updateViewLayout(container, p);
     }
 
-    public static void hideKeyboard(Activity activity) {
-        InputMethodManager imm = (InputMethodManager) activity.getSystemService(Activity.INPUT_METHOD_SERVICE);
-        //Find the currently focused view, so we can grab the correct window token from it.
-        View view = activity.getCurrentFocus();
-        //If no view currently has focus, create a new one, just so we can grab a window token from it
-        if (view == null) {
-            view = new View(activity);
-        }
-        imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+
+
+    private void onAddButtonClick(){
+        String topic = topicText.getText().toString();
+        String date = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+        String desc = "TODO";
+        String expiry = "TODO";
+        LatLng latLng = new LatLng(address.getLatitude(), address.getLongitude());
+        Geofence geofence = new Geofence(topic, new GeoPoint(address.getLatitude(), address.getLongitude()), 1);
+        reminders.add(new Reminder(topic, desc, date, expiry, latLng, geofence));
+        writeToStorage();
+        refreshRemindersView();
     }
+
+    private void refreshRemindersView(){
+        remindersView = findViewById(R.id.remindersView);
+        remindersViewAdapter = new RemindersViewAdapter(MainActivity.this, reminders, this);
+        remindersView.setAdapter(remindersViewAdapter);
+        remindersView.setLayoutManager(new LinearLayoutManager(getApplicationContext()));
+    }
+
+    private void writeToStorage(){
+        try {
+            FileOutputStream fileOutputStream = openFileOutput("myReminders", MODE_PRIVATE);
+            ObjectOutputStream objectOutputStream = new ObjectOutputStream(fileOutputStream);
+            objectOutputStream.writeObject(reminders);
+            objectOutputStream.close();
+            fileOutputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public ArrayList<Reminder> loadRemindersFromFile(Context context) {
+        ArrayList<Reminder> reminders = new ArrayList<>();
+        try {
+            FileInputStream fileInputStream = context.openFileInput("myReminders");
+            System.out.println(fileInputStream.available());
+            ObjectInputStream objectInputStream = new ObjectInputStream(fileInputStream);
+            reminders = (ArrayList<Reminder>) objectInputStream.readObject();
+            objectInputStream.close();
+            fileInputStream.close();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        return reminders;
+    }
+
+    @Override
+    public void click(int position, int color) {
+        // Inflate the popup layout
+        View popupView = LayoutInflater.from(this).inflate(R.layout.reminder_single_view, null);
+
+        // Create the popup window
+        PopupWindow popupWindow = new PopupWindow(popupView, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        popupWindow.setOutsideTouchable(true);
+        popupWindow.setFocusable(true);
+        popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+
+        Reminder r = reminders.get(position);
+        GeoPoint point = new GeoPoint(r.geofence.getCenter().getLatitude(), r.geofence.getCenter().getLongitude());
+
+        Marker marker = new Marker(mapView);
+        Drawable mark = ContextCompat.getDrawable(getApplicationContext(), R.drawable.baseline_location_on_24);
+        mark.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        marker.setIcon(mark);
+        marker.setImage(mark);
+        marker.setTitle("FFFF");
+        marker.showInfoWindow();
+        marker.setPosition(point);
+        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+
+
+        // Show the popup window
+        popupWindow.showAtLocation(popupView, Gravity.CENTER, 0, 0);
+        MapView itemViewMap = popupView.findViewById(R.id.newItemMap);
+        itemViewMap.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
+        itemViewMap.getController().setZoom(17.0);
+        itemViewMap.getOverlays().add(marker);
+        itemViewMap.getController().animateTo(point);
+        TextView t = popupView.findViewById(R.id.nameTextView);
+        t.setText(r.name);
+        itemViewMap.setBuiltInZoomControls(false);
+        itemViewMap.setMultiTouchControls(true);
+        itemViewMap.getOverlayManager().getTilesOverlay().setColorFilter(TilesOverlay.INVERT_COLORS);
+
+
+
+        Button deleteButton = popupView.findViewById(R.id.deleteButton);
+        deleteButton.setOnClickListener(e->{
+            reminders.remove(position);
+            popupWindow.dismiss();
+            refreshRemindersView();
+            writeToStorage();
+        });
+
+        // Add the blur
+        View container = (View) popupWindow.getContentView().getParent();
+        WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) container.getLayoutParams();
+        p.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
+        p.dimAmount = 0.7f;
+        wm.updateViewLayout(container, p);
+    }
+
 
     private class GeocodeTask extends AsyncTask<String, Void, List<Address>>{
 
@@ -256,18 +393,43 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     public void onLocationChanged(Location location) {
         GeoPoint currentLocation = new GeoPoint(location.getLatitude(), location.getLongitude());
 
-        // Check if the current location is inside the geofence
-        float[] results = new float[1];
-        Location.distanceBetween(currentLocation.getLatitude(), currentLocation.getLongitude(),
-                geofences[0].getCenter().getLatitude(), geofences[0].getCenter().getLongitude(), results);
-        float distanceInMeters = results[0];
-        if (distanceInMeters <= geofences[0].getRadius()) {
-//            Toast.makeText(this, "You're in location", Toast.LENGTH_LONG).show();
-            // Do something when the user is inside the geofence
-        } else {
-//            Log.d("Geofence", "Current location is outside the geofence.");
-            // Do something when the user is outside the geofence
+       ArrayList<Float> distanceArr = getDistances(currentLocation.getLatitude(), currentLocation.getLongitude());
+       for(int i = 0; i < distanceArr.size(); i++){
+           if(distanceArr.get(i) <= geofences[0].getRadius()){
+               sendNearbyNotification(reminders.get(i).name);
+           }
+       }
+    }
+
+    public void sendNearbyNotification(String name) {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "channelId")
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("Nearby Location")
+                .setContentText("You are near " + name)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+
+        // Create an explicit intent for an Activity in your app
+        Intent intent = new Intent(this, MainActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
+        builder.setContentIntent(pendingIntent);
+
+        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
+
+        // notificationId is a unique int for each notification that you must define
+        int notificationId = 12345;
+        notificationManager.notify(notificationId, builder.build());
+    }
+
+
+    private ArrayList<Float> getDistances(double latitude, double longitude){
+        ArrayList<Float> distanceArray = new ArrayList<>();
+        for(int i = 0; i < reminders.size(); i++){
+            Geofence g = reminders.get(i).geofence;
+            float[] results = new float[1];
+            Location.distanceBetween(latitude, longitude, g.getCenter().getLatitude(), g.getCenter().getLongitude(), results);
+            distanceArray.add(results[0]);
         }
+        return distanceArray;
     }
 
     @Override
