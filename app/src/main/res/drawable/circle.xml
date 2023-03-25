@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="50dp"
+    android:height="50dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+    <group>
+        <!-- Circle border -->
+        <path
+            android:strokeColor="#FF0000"
+            android:strokeWidth="2"
+            android:pathData="M 50, 50 m -48, 0 a 48,48 0 1,0 96,0 a 48,48 0 1,0 -96,0"/>
+
+        <!-- Circle fill -->
+        <path
+            android:fillColor="#80FF6347"
+            android:pathData="M 50, 50 m -48, 0 a 48,48 0 1,0 96,0 a 48,48 0 1,0 -96,0"/>
+    </group>
+
+</vector>
