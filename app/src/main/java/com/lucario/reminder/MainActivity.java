@@ -1,8 +1,9 @@
 package com.lucario.reminder;
 
 import android.Manifest;
-import android.app.NotificationChannel;
+import android.app.Notification;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -14,10 +15,11 @@ import android.icu.text.SimpleDateFormat;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
-import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -42,7 +44,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
-import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -67,7 +68,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-public class MainActivity extends AppCompatActivity implements LocationListener,RemindersViewAdapter.click {
+public class MainActivity extends AppCompatActivity implements RemindersViewAdapter.click {
 
     private MapView mapView;
     private LocationManager locationManager;
@@ -407,53 +408,30 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
             }
         }
     }
-    @Override
-    public void onLocationChanged(Location location) {
-        GeoPoint currentLocation = new GeoPoint(location.getLatitude(), location.getLongitude());
 
-       ArrayList<Float> distanceArr = getDistances(currentLocation.getLatitude(), currentLocation.getLongitude());
-       for(int i = 0; i < distanceArr.size(); i++){
-           if(distanceArr.get(i) <= radius){
-               sendNearbyNotification(reminders.get(i).name);
-           }
-       }
-    }
+//    private void getNotificationPermission(){
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+//            NotificationManager notificationManager =
+//                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+//            Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+//            intent.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
+//            PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
+//
+//            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+//                    .setContentTitle()
+//                    .setContentText(getString(R.string.notification_permission_text))
+//                    .setSmallIcon(R.drawable.ic_notification)
+//                    .setContentIntent(pendingIntent)
+//                    .setAutoCancel(true)
+//                    .build();
+//
+//            notificationManager.requestPermission(
+//                    new ComponentName(this, MyNotificationListenerService.class),
+//                    pendingIntent);
+//        }
+//
+//    }
 
-    public void sendNearbyNotification(String name) {
-        String channelId = "reminder";
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("Reminder")
-                .setContentText("You are near " + name)
-                .setPriority(NotificationCompat.PRIORITY_HIGH);
-
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
-
-        // Create a notification channel
-        CharSequence channelName = "My Channel Name";
-        String description = "My Channel Description";
-        int importance = NotificationManager.IMPORTANCE_HIGH;
-        NotificationChannel channel = new NotificationChannel(channelId, channelName, importance);
-        channel.setDescription(description);
-        notificationManager.createNotificationChannel(channel);
-
-        // notificationId is a unique int for each notification that you must define
-        int notificationId = name.hashCode();
-        notificationManager.notify(notificationId, builder.build());
-    }
-
-
-
-    private ArrayList<Float> getDistances(double latitude, double longitude){
-        ArrayList<Float> distanceArray = new ArrayList<>();
-        for(int i = 0; i < reminders.size(); i++){
-            Geofence g = reminders.get(i).geofence;
-            float[] results = new float[1];
-            Location.distanceBetween(latitude, longitude, g.getCenter().getLatitude(), g.getCenter().getLongitude(), results);
-            distanceArray.add(results[0]);
-        }
-        return distanceArray;
-    }
 
     private void onHamburgerClick(float x, float y){
         View popupView = LayoutInflater.from(this).inflate(R.layout.activity_settings, new CardView(MainActivity.this));
@@ -486,11 +464,5 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
         p.dimAmount = 0.5f;
         wm.updateViewLayout(container, p);
     }
-
-    @Override
-    public void onProviderEnabled(String provider) {}
-
-    @Override
-    public void onProviderDisabled(String provider) {}
 }
 

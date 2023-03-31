@@ -77,8 +77,8 @@ public class LocationService extends Service implements LocationListener {
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
 
         // Create a notification channel
-        CharSequence channelName = "My Channel Name";
-        String description = "My Channel Description";
+        CharSequence channelName = "Reminders";
+        String description = "This is used to send you reminders";
         int importance = NotificationManager.IMPORTANCE_HIGH;
         NotificationChannel channel = new NotificationChannel(channelId, channelName, importance);
         channel.setDescription(description);
