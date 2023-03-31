@@ -1,3 +1,17 @@
 <resources>
     <string name="app_name">Reminder</string>
+    <string name="delete">Delete</string>
+    <string name="enter_a_topic_here">Enter a topic here</string>
+    <string name="search_for_places">Search for places</string>
+    <string name="add">Add</string>
+    <string name="cancel">Cancel</string>
+    <string name="searchbutton">SearchButton</string>
+    <string name="notifications">Notifications</string>
+    <string name="menu">Menu</string>
+    <string name="tasks">Tasks</string>
+    <string name="add_button">Add Button</string>
+    <string name="custom_radius">Custom radius</string>
+    <string name="in_kms">In KMs</string>
+    <string name="color_coding">Color Coding</string>
+    <string name="buy_medicine">Buy Medicine</string>
 </resources>

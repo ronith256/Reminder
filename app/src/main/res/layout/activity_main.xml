@@ -17,7 +17,8 @@
         app:layout_constraintHorizontal_bias="0.696"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.382" />
+        app:layout_constraintVertical_bias="0.382"
+        android:contentDescription="@string/searchbutton" />
 
     <ImageView
         android:layout_width="wrap_content"
@@ -28,7 +29,21 @@
         app:layout_constraintHorizontal_bias="0.423"
         app:layout_constraintStart_toEndOf="@+id/imageView2"
         app:layout_constraintTop_toTopOf="@+id/imageView2"
-        app:layout_constraintVertical_bias="0.0" />
+        app:layout_constraintVertical_bias="0.0"
+        android:contentDescription="@string/notifications" />
+
+    <ImageView
+        android:id="@+id/hamburger"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@drawable/baseline_menu_24"
+        app:layout_constraintBottom_toTopOf="@+id/cardView"
+        app:layout_constraintEnd_toStartOf="@+id/imageView2"
+        app:layout_constraintHorizontal_bias="0.0"
+        app:layout_constraintStart_toStartOf="@+id/cardView"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.518"
+        android:contentDescription="@string/menu" />
 
     <androidx.cardview.widget.CardView
         android:id="@+id/cardView"
@@ -54,7 +69,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:fontFamily="@font/ambition"
-        android:text="Tasks"
+        android:text="@string/tasks"
         android:textSize="35sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="@+id/cardView"
@@ -91,6 +106,7 @@
         android:layout_width="79dp"
         android:layout_height="75dp"
         android:background="@android:color/transparent"
+        android:contentDescription="@string/add_button"
         android:elevation="10dp"
         android:src="@drawable/add_button"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -98,5 +114,6 @@
         app:layout_constraintHorizontal_bias="0.951"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.975" />
+        app:layout_constraintVertical_bias="0.975"
+        tools:ignore="ImageContrastCheck,RedundantDescriptionCheck" />
 </androidx.constraintlayout.widget.ConstraintLayout>

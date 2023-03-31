@@ -10,7 +10,7 @@ public class Geofence implements Serializable {
     private GeoPoint center;
     private float radius;
 
-    public Geofence(String id, GeoPoint center, float radius) {
+    public Geofence(String id, GeoPoint center, float radius)  {
         this.id = id;
         this.center = center;
         this.radius = radius;

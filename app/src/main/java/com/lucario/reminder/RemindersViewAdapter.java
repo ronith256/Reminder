@@ -1,53 +1,30 @@
 package com.lucario.reminder;
 
-import android.app.Dialog;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.VectorDrawable;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.ImageView;
-import android.widget.PopupWindow;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.cardview.widget.CardView;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
-
-import com.google.android.gms.maps.CameraUpdateFactory;
-import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapsInitializer;
-import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
-import org.osmdroid.views.MapView;
 
 import java.util.ArrayList;
 
 public class RemindersViewAdapter extends RecyclerView.Adapter<RemindersViewAdapter.ViewHolder> {
-    private Context context;
-    private click listener;
-    private ArrayList<Reminder> reminderArrayList;
+    private final Context context;
+    private final click listener;
+    private final ArrayList<Reminder> reminderArrayList;
 
-    private ArrayList<Integer> colorList = new ArrayList<>();
+    private final ArrayList<Integer> colorList = new ArrayList<>();
     RemindersViewAdapter(Context context, ArrayList<Reminder> reminderArrayList, click listener){
         this.context = context;
         this.listener = listener;
@@ -67,7 +44,7 @@ public class RemindersViewAdapter extends RecyclerView.Adapter<RemindersViewAdap
         holder.circle.setBackground(generateCircularDrawable(context));
         holder.reminderView.setOnLongClickListener(e->{
             if (listener != null) {
-                listener.click(position, colorList.get(position));
+                listener.onLongPress(position, colorList.get(position));
                 return true;
             }
             return false;
@@ -112,7 +89,7 @@ public class RemindersViewAdapter extends RecyclerView.Adapter<RemindersViewAdap
     }
 
     public interface click {
-        void click(int position, int color);
+        void onLongPress(int position, int color);
     }
 
     @Override

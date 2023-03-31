@@ -1,12 +1,12 @@
 package com.lucario.reminder;
 
 import android.Manifest;
-import android.app.Activity;
-import android.app.PendingIntent;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
+import android.content.res.Configuration;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
@@ -26,18 +26,20 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.view.inputmethod.InputMethodManager;
-import android.widget.AdapterView;
+import android.view.inputmethod.EditorInfo;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.PopupWindow;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -68,8 +70,9 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity implements LocationListener,RemindersViewAdapter.click {
 
     private MapView mapView;
-    private Geofence[] geofences;
     private LocationManager locationManager;
+
+    float radius = 1000.0f;
 
     private AutoCompleteTextView searchEditText;
     private GeocoderNominatim geocoder;
@@ -107,7 +110,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
         setContentView(R.layout.activity_main);
 
         reminders = loadRemindersFromFile(getApplicationContext());
-        geofences = new Geofence[10];
         geocoder = new GeocoderNominatim(BuildConfig.APPLICATION_ID);
         geocoder.setService("https://nominatim.openstreetmap.org/");
 
@@ -118,11 +120,10 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
 
         ImageButton addButton = (ImageButton) findViewById(R.id.imageButton);
         addButton.setOnClickListener(e-> showPopup());
+        ImageView hamburgerMenu = findViewById(R.id.hamburger);
+        hamburgerMenu.setOnClickListener(e->onHamburgerClick(hamburgerMenu.getX(), hamburgerMenu.getY()));
 
         mapView = findViewById(R.id.mapview);
-        GeoPoint center = new GeoPoint( 10.884319, 76.908697); // New York City
-        float radius = 1000.0f; // 1 kilometer
-        geofences[0] = new Geofence("my_geofence", center, radius);
         // Set the map center and zoom level
         start();
     }
@@ -135,17 +136,34 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
                 return;
             }
             Location curLoc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            GeoPoint startPoint = new GeoPoint(curLoc.getLatitude(), curLoc.getLongitude());
-            mapView.getOverlayManager().getTilesOverlay().setColorFilter(TilesOverlay.INVERT_COLORS);
-            mapView.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
-            mapView.getController().setZoom(17.0);
-            mapView.getController().setCenter(startPoint);
-            mapView.setBuiltInZoomControls(false);
-            mapView.setMultiTouchControls(true);
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10000, 0, this);
+           if(curLoc != null){
+               GeoPoint startPoint = new GeoPoint(curLoc.getLatitude(), curLoc.getLongitude());
+               mapView.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
+               mapView.getController().setZoom(17.0);
+               setNightMode(mapView);
+               mapView.getController().setCenter(startPoint);
+               mapView.setBuiltInZoomControls(false);
+               mapView.setMultiTouchControls(true);
+//               locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10000, 0, this);
+               Intent intent = new Intent(this, LocationService.class);
+               intent.putExtra("reminders", reminders);
+               intent.putExtra("radius", radius);
+               startService(intent);
+
+           } else {
+               Toast.makeText(getApplicationContext(), "GPS cannot be acquired", Toast.LENGTH_SHORT).show();
+           }
         }
     }
 
+    private void setNightMode(MapView mapView){
+        int nightModeFlags =
+                getApplicationContext().getResources().getConfiguration().uiMode &
+                        Configuration.UI_MODE_NIGHT_MASK;
+        if (nightModeFlags == Configuration.UI_MODE_NIGHT_YES) {
+            mapView.getOverlayManager().getTilesOverlay().setColorFilter(TilesOverlay.INVERT_COLORS);
+        }
+    }
     private void showPopup() {
         // Inflate the popup layout
         View popupView = LayoutInflater.from(this).inflate(R.layout.activity_add_item, null);
@@ -162,10 +180,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
         geocodeTask = new GeocodeTask();
         itemViewMap = popupView.findViewById(R.id.newItemMap);
         itemViewMap.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
+        setNightMode(itemViewMap);
         itemViewMap.getController().setZoom(17.0);
         itemViewMap.setBuiltInZoomControls(false);
         itemViewMap.setMultiTouchControls(true);
-        itemViewMap.getOverlayManager().getTilesOverlay().setColorFilter(TilesOverlay.INVERT_COLORS);
+
 
         addButton = popupView.findViewById(R.id.addButton);
         cancelButton = popupView.findViewById(R.id.cancelButton);
@@ -271,9 +290,9 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
     }
 
     @Override
-    public void click(int position, int color) {
+    public void onLongPress(int position, int color) {
         // Inflate the popup layout
-        View popupView = LayoutInflater.from(this).inflate(R.layout.reminder_single_view, null);
+        View popupView = LayoutInflater.from(this).inflate(R.layout.reminder_single_view, new CardView(MainActivity.this));
 
         // Create the popup window
         PopupWindow popupWindow = new PopupWindow(popupView, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -289,8 +308,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
         mark.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
         marker.setIcon(mark);
         marker.setImage(mark);
-        marker.setTitle("FFFF");
-        marker.showInfoWindow();
+        marker.setTitle(r.name);
         marker.setPosition(point);
         marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
 
@@ -306,7 +324,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
         t.setText(r.name);
         itemViewMap.setBuiltInZoomControls(false);
         itemViewMap.setMultiTouchControls(true);
-        itemViewMap.getOverlayManager().getTilesOverlay().setColorFilter(TilesOverlay.INVERT_COLORS);
+        setNightMode(itemViewMap);
 
 
 
@@ -395,30 +413,35 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
 
        ArrayList<Float> distanceArr = getDistances(currentLocation.getLatitude(), currentLocation.getLongitude());
        for(int i = 0; i < distanceArr.size(); i++){
-           if(distanceArr.get(i) <= geofences[0].getRadius()){
+           if(distanceArr.get(i) <= radius){
                sendNearbyNotification(reminders.get(i).name);
            }
        }
     }
 
     public void sendNearbyNotification(String name) {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "channelId")
+        String channelId = "reminder";
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("Nearby Location")
+                .setContentTitle("Reminder")
                 .setContentText("You are near " + name)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT);
-
-        // Create an explicit intent for an Activity in your app
-        Intent intent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
-        builder.setContentIntent(pendingIntent);
+                .setPriority(NotificationCompat.PRIORITY_HIGH);
 
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
 
+        // Create a notification channel
+        CharSequence channelName = "My Channel Name";
+        String description = "My Channel Description";
+        int importance = NotificationManager.IMPORTANCE_HIGH;
+        NotificationChannel channel = new NotificationChannel(channelId, channelName, importance);
+        channel.setDescription(description);
+        notificationManager.createNotificationChannel(channel);
+
         // notificationId is a unique int for each notification that you must define
-        int notificationId = 12345;
+        int notificationId = name.hashCode();
         notificationManager.notify(notificationId, builder.build());
     }
+
 
 
     private ArrayList<Float> getDistances(double latitude, double longitude){
@@ -432,15 +455,42 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
         return distanceArray;
     }
 
+    private void onHamburgerClick(float x, float y){
+        View popupView = LayoutInflater.from(this).inflate(R.layout.activity_settings, new CardView(MainActivity.this));
+
+        PopupWindow popupWindow = new PopupWindow(popupView, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        popupWindow.setOutsideTouchable(true);
+        popupWindow.setFocusable(true);
+        popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+
+        EditText customRadius = popupView.findViewById(R.id.customRadiusEdit);
+
+        customRadius.setOnKeyListener((view, i, keyEvent) -> {
+            if ((keyEvent.getAction() == EditorInfo.IME_ACTION_DONE)){
+                try{
+                    radius = Float.parseFloat(customRadius.getText().toString()) * 1000f;
+                    getSharedPreferences("reminder", Context.MODE_PRIVATE).edit().putFloat("radius", radius).apply();
+                } catch (Exception ignored){
+                    Toast.makeText(getApplicationContext(), "Invalid input", Toast.LENGTH_SHORT).show();
+                }
+                return true;
+            }
+            return false;
+        });
+
+        popupWindow.showAtLocation(popupView, Gravity.NO_GRAVITY, (int)x, (int)y+200);
+        View container = (View) popupWindow.getContentView().getParent();
+        WindowManager wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        WindowManager.LayoutParams p = (WindowManager.LayoutParams) container.getLayoutParams();
+        p.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
+        p.dimAmount = 0.5f;
+        wm.updateViewLayout(container, p);
+    }
+
     @Override
     public void onProviderEnabled(String provider) {}
 
     @Override
     public void onProviderDisabled(String provider) {}
-
-    @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {}
-
-
 }
 
