@@ -25,25 +25,28 @@ import java.util.ArrayList;
 
 public class LocationService extends Service implements LocationListener {
 
-    private LocationManager locationManager;
     private ArrayList<Reminder> reminders;
     float radius;
 
+    private final String channelId = "reminder";
+    private NotificationManagerCompat notificationManager;
 
+    @SuppressWarnings("unchecked")
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // Start requesting location updates
         Bundle extras = intent.getExtras();
+        createChannel();
+        sendNearbyNotification("Test");
         if (extras != null) {
             // Get the ArrayList and float from the extras
             reminders = (ArrayList<Reminder>) intent.getSerializableExtra("reminders");
             radius = extras.getFloat("radius");
             System.out.println(radius);
         }
-        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                 && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 0, this);
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10000, 5, this);
         }
         return super.onStartCommand(intent, flags, startId);
     }
@@ -57,7 +60,7 @@ public class LocationService extends Service implements LocationListener {
     @Override
     public void onLocationChanged(Location location) {
         GeoPoint currentLocation = new GeoPoint(location.getLatitude(), location.getLongitude());
-
+        this.reminders = MainActivity.reminders;
         ArrayList<Float> distanceArr = getDistances(currentLocation.getLatitude(), currentLocation.getLongitude());
         for(int i = 0; i < distanceArr.size(); i++){
             if(distanceArr.get(i) <= radius){
@@ -66,28 +69,28 @@ public class LocationService extends Service implements LocationListener {
         }
     }
 
-    public void sendNearbyNotification(String name) {
-        String channelId = "reminder";
+    private void sendNearbyNotification(String name) {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("Reminder")
                 .setContentText("You are near " + name)
                 .setPriority(NotificationCompat.PRIORITY_HIGH);
+        // notificationId is a unique int for each notification that you must define
+        int notificationId = name.hashCode();
+        notificationManager.notify(notificationId, builder.build());
+    }
 
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
-
-        // Create a notification channel
+    private void createChannel(){
+        notificationManager = NotificationManagerCompat.from(this);
         CharSequence channelName = "Reminders";
         String description = "This is used to send you reminders";
         int importance = NotificationManager.IMPORTANCE_HIGH;
         NotificationChannel channel = new NotificationChannel(channelId, channelName, importance);
         channel.setDescription(description);
         notificationManager.createNotificationChannel(channel);
-
-        // notificationId is a unique int for each notification that you must define
-        int notificationId = name.hashCode();
-        notificationManager.notify(notificationId, builder.build());
     }
+
+
 
     private ArrayList<Float> getDistances(double latitude, double longitude){
         ArrayList<Float> distanceArray = new ArrayList<>();
@@ -101,18 +104,13 @@ public class LocationService extends Service implements LocationListener {
     }
 
     @Override
-    public void onStatusChanged(String provider, int status, Bundle extras) {
-        // Handle status changes here
-    }
-
-    @Override
     public void onProviderEnabled(String provider) {
         // Handle provider enabled here
     }
 
     @Override
     public void onProviderDisabled(String provider) {
-        // Handle provider disabled here
+        Toast.makeText(LocationService.this, "Please enable GPS", Toast.LENGTH_SHORT).show();
     }
 }
 

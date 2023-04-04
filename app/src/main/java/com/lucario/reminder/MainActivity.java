@@ -1,9 +1,6 @@
 package com.lucario.reminder;
 
 import android.Manifest;
-import android.app.Notification;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -19,7 +16,6 @@ import android.location.LocationManager;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
@@ -43,7 +39,6 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.cardview.widget.CardView;
 import androidx.core.app.ActivityCompat;
-import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -53,6 +48,7 @@ import com.google.android.gms.maps.model.LatLng;
 import org.osmdroid.bonuspack.location.GeocoderNominatim;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
+import org.osmdroid.views.CustomZoomButtonsController;
 import org.osmdroid.views.MapView;
 import org.osmdroid.views.overlay.Marker;
 import org.osmdroid.views.overlay.TilesOverlay;
@@ -63,6 +59,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -71,22 +68,18 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity implements RemindersViewAdapter.click {
 
     private MapView mapView;
-    private LocationManager locationManager;
 
     float radius = 1000.0f;
 
     private AutoCompleteTextView searchEditText;
-    private GeocoderNominatim geocoder;
 
     private GeocodeTask geocodeTask;
 
     static ArrayList<Address> addresses = new ArrayList<>();
 
-    private ArrayList<Reminder> reminders = new ArrayList<>();
+    public static ArrayList<Reminder> reminders = new ArrayList<>();
 
     private MapView itemViewMap;
-
-    private Button addButton, cancelButton;
 
     private EditText topicText;
 
@@ -111,7 +104,7 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
         setContentView(R.layout.activity_main);
 
         reminders = loadRemindersFromFile(getApplicationContext());
-        geocoder = new GeocoderNominatim(BuildConfig.APPLICATION_ID);
+        GeocoderNominatim geocoder = new GeocoderNominatim(BuildConfig.APPLICATION_ID);
         geocoder.setService("https://nominatim.openstreetmap.org/");
 
         remindersView = findViewById(R.id.remindersView);
@@ -124,13 +117,15 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
         ImageView hamburgerMenu = findViewById(R.id.hamburger);
         hamburgerMenu.setOnClickListener(e->onHamburgerClick(hamburgerMenu.getX(), hamburgerMenu.getY()));
 
+
+
         mapView = findViewById(R.id.mapview);
         // Set the map center and zoom level
         start();
     }
 
     private void start(){
-        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         if (locationManager != null) {
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 checkLocationPermission();
@@ -143,19 +138,28 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
                mapView.getController().setZoom(17.0);
                setNightMode(mapView);
                mapView.getController().setCenter(startPoint);
-               mapView.setBuiltInZoomControls(false);
+               mapView.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.NEVER);
                mapView.setMultiTouchControls(true);
 //               locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 10000, 0, this);
                Intent intent = new Intent(this, LocationService.class);
                intent.putExtra("reminders", reminders);
                intent.putExtra("radius", radius);
-               startService(intent);
+               if (Build.VERSION.SDK_INT >= 33) {
+                   if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                       ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.POST_NOTIFICATIONS},101);
+                   }
+                   else {
+                       startService(intent);
+                   }
+               }
 
            } else {
                Toast.makeText(getApplicationContext(), "GPS cannot be acquired", Toast.LENGTH_SHORT).show();
            }
         }
     }
+
+
 
     private void setNightMode(MapView mapView){
         int nightModeFlags =
@@ -167,7 +171,7 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
     }
     private void showPopup() {
         // Inflate the popup layout
-        View popupView = LayoutInflater.from(this).inflate(R.layout.activity_add_item, null);
+        View popupView = LayoutInflater.from(this).inflate(R.layout.activity_add_item, new CardView(MainActivity.this));
 
         // Create the popup window
         PopupWindow popupWindow = new PopupWindow(popupView, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -178,17 +182,17 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
         // Show the popup window
         popupWindow.showAtLocation(popupView, Gravity.CENTER, 0, 0);
         searchEditText = popupView.findViewById(R.id.searchEditText);
-        geocodeTask = new GeocodeTask();
+        geocodeTask = new GeocodeTask(new WeakReference<>(MainActivity.this), new WeakReference<>(searchEditText));
         itemViewMap = popupView.findViewById(R.id.newItemMap);
         itemViewMap.setTileSource(TileSourceFactory.DEFAULT_TILE_SOURCE);
         setNightMode(itemViewMap);
         itemViewMap.getController().setZoom(17.0);
-        itemViewMap.setBuiltInZoomControls(false);
+        itemViewMap.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.NEVER);
         itemViewMap.setMultiTouchControls(true);
 
 
-        addButton = popupView.findViewById(R.id.addButton);
-        cancelButton = popupView.findViewById(R.id.cancelButton);
+        Button addButton = popupView.findViewById(R.id.addButton);
+        Button cancelButton = popupView.findViewById(R.id.cancelButton);
 
         addButton.setOnClickListener(e->{
             onAddButtonClick();
@@ -222,7 +226,7 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
                 // Start a new GeocodeTask with the entered address
                 String address = s.toString();
                 if (!TextUtils.isEmpty(address)) {
-                    geocodeTask = new GeocodeTask();
+                    geocodeTask = new GeocodeTask(new WeakReference<>(MainActivity.this), new WeakReference<>(searchEditText));
                     geocodeTask.execute(address);
                 }
             }
@@ -274,7 +278,7 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
             e.printStackTrace();
         }
     }
-
+    @SuppressWarnings("unchecked")
     public ArrayList<Reminder> loadRemindersFromFile(Context context) {
         ArrayList<Reminder> reminders = new ArrayList<>();
         try {
@@ -306,7 +310,9 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
 
         Marker marker = new Marker(mapView);
         Drawable mark = ContextCompat.getDrawable(getApplicationContext(), R.drawable.baseline_location_on_24);
-        mark.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        if(mark!=null){
+            mark.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN));
+        }
         marker.setIcon(mark);
         marker.setImage(mark);
         marker.setTitle(r.name);
@@ -323,7 +329,7 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
         itemViewMap.getController().animateTo(point);
         TextView t = popupView.findViewById(R.id.nameTextView);
         t.setText(r.name);
-        itemViewMap.setBuiltInZoomControls(false);
+        itemViewMap.getZoomController().setVisibility(CustomZoomButtonsController.Visibility.NEVER);
         itemViewMap.setMultiTouchControls(true);
         setNightMode(itemViewMap);
 
@@ -347,15 +353,25 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
     }
 
 
-    private class GeocodeTask extends AsyncTask<String, Void, List<Address>>{
+    private static class GeocodeTask extends AsyncTask<String, Void, List<Address>>{
 
         private Geocoder geocoder;
+        private final WeakReference<Context> contextRef;
+
+        private final WeakReference<AutoCompleteTextView> searchEditText;
+
+        private GeocodeTask(WeakReference<Context> contextRef, WeakReference<AutoCompleteTextView> searchEditText) {
+            super();
+            this.contextRef = contextRef;
+            this.searchEditText = searchEditText;
+        }
+
 
         @Override
         protected void onPreExecute() {
             super.onPreExecute();
             // Initialize the geocoder
-            geocoder = new Geocoder(MainActivity.this);
+            geocoder = new Geocoder(contextRef.get());
         }
 
         @Override
@@ -381,10 +397,10 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
 
                 MainActivity.addresses.addAll(addresses);
                 // Create an adapter for the suggestion dropdown list
-                ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
+                ArrayAdapter<String> adapter = new ArrayAdapter<>(contextRef.get(),
                         android.R.layout.simple_dropdown_item_1line, suggestions);
-                searchEditText.setAdapter(adapter);
-                searchEditText.showDropDown();
+                searchEditText.get().setAdapter(adapter);
+                searchEditText.get().showDropDown();
             }
         }
     }
@@ -407,31 +423,18 @@ public class MainActivity extends AppCompatActivity implements RemindersViewAdap
                checkLocationPermission();
             }
         }
+
+        if(requestCode == 101){
+            if(grantResults.length > 0  && grantResults[0] == PackageManager.PERMISSION_GRANTED){
+                Intent intent = new Intent(this, LocationService.class);
+                intent.putExtra("reminders", reminders);
+                intent.putExtra("radius", radius);
+                startService(intent);
+            } else {
+                Toast.makeText(MainActivity.this, "Please enable notification permission", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
-
-//    private void getNotificationPermission(){
-//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-//            NotificationManager notificationManager =
-//                    (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-//            Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
-//            intent.putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName());
-//            PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
-//
-//            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-//                    .setContentTitle()
-//                    .setContentText(getString(R.string.notification_permission_text))
-//                    .setSmallIcon(R.drawable.ic_notification)
-//                    .setContentIntent(pendingIntent)
-//                    .setAutoCancel(true)
-//                    .build();
-//
-//            notificationManager.requestPermission(
-//                    new ComponentName(this, MyNotificationListenerService.class),
-//                    pendingIntent);
-//        }
-//
-//    }
-
 
     private void onHamburgerClick(float x, float y){
         View popupView = LayoutInflater.from(this).inflate(R.layout.activity_settings, new CardView(MainActivity.this));
